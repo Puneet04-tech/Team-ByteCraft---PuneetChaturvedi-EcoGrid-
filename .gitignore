@@ -68,6 +68,8 @@ __pycache__/
 *.pyc
 instance/
 .webassets-cache
+# Render deployment
+.render/
 # Keep generated output files
 !ecogrid_triple_dataset_matrix.csv
 !ecogrid_triple_dataset_predictions_*.png
