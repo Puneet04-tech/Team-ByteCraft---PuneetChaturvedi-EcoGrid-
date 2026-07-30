@@ -47,18 +47,24 @@ time_left.tsv
 *.h5
 *.pb
 
-# Data files
-*.csv
+# Data files - ignore extracted data and intermediate files
 *.xlsx
 *.json
-*.txt
-*.zip
 data/
+# Keep dataset zip files but ignore extracted data
 occupancy_extracted/
-second_dataset_extracted/
+appliances_energy_extracted/
+energy_efficiency_extracted/
+# Ignore intermediate datasets
 ecogrid_integrated_matrix.csv
 ashrae_combined.csv
 occupancy_combined.csv
+# Keep generated output files
+!ecogrid_triple_dataset_matrix.csv
+!ecogrid_triple_dataset_predictions_*.png
+# Keep final output files
+!ecogrid_triple_dataset_matrix.csv
+!ecogrid_triple_dataset_predictions_*.png
 
 # OS specific
 .DS_Store
