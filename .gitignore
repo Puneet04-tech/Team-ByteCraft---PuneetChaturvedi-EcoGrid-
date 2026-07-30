@@ -56,6 +56,9 @@ time_left.tsv
 data/
 occupancy_extracted/
 second_dataset_extracted/
+ecogrid_integrated_matrix.csv
+ashrae_combined.csv
+occupancy_combined.csv
 
 # OS specific
 .DS_Store
