@@ -86,6 +86,15 @@ def health_check():
     return 'OK', 200
 
 @app.route('/api/health', methods=['GET'])
+def api_health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': classification_models is not None,
+        'message': 'EcoGrid AI API is running'
+    })
+
+@app.route('/api/health', methods=['GET'])
 def health():
     """Health check endpoint"""
     return jsonify({
@@ -227,11 +236,10 @@ def get_features():
         }
     })
 
-# Load models at startup
+# Load models when module is imported (for Gunicorn)
 print("Starting model loading...")
 load_models()
 print("Model loading completed successfully")
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=False, host='0.0.0.0')
