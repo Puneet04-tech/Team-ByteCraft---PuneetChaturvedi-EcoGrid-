@@ -14,9 +14,6 @@ from sklearn.preprocessing import LabelEncoder
 import lightgbm as lgb
 warnings.filterwarnings('ignore')
 
-app = Flask(__name__)
-CORS(app)
-
 # Global variables for models
 classification_models = None
 regression_models = None
@@ -75,17 +72,25 @@ def load_models():
         print(f"Error loading models: {e}")
         return False
 
+app = Flask(__name__)
+CORS(app)
+
 @app.route('/')
 def home():
     """Serve the frontend"""
     return render_template('index.html')
+
+@app.route('/health')
+def health_check():
+    """Simple health check for Render"""
+    return 'OK', 200
 
 @app.route('/api/health', methods=['GET'])
 def health():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'model_loaded': classification_model is not None,
+        'model_loaded': classification_models is not None,
         'message': 'EcoGrid AI API is running'
     })
 
@@ -222,8 +227,10 @@ def get_features():
         }
     })
 
-# Load models when the app is imported (for Gunicorn)
+# Load models at startup
+print("Starting model loading...")
 load_models()
+print("Model loading completed successfully")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
