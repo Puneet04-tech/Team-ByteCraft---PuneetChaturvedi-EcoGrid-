@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AETHEAS — Next-Gen Orbital Systems</title>
+<style>
+  :root{
+    --blue:#0074ff;
+    --red:#ff1133;
+    --ink:#020204;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--ink);
+    color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* faint hud grid overlay across whole viewport */
+  .hud-overlay{
+    position:fixed;inset:0;pointer-events:none;z-index:3;
+    background-image:
+      linear-gradient(to right, rgba(0,116,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,116,255,0.025) 1px, transparent 1px);
+    background-size:64px 64px;
+    mix-blend-mode:screen;
+  }
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:4;
+    background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,0.55) 100%);
+  }
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:5;opacity:.035;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  #webgl-container{
+    position:fixed;inset:0;z-index:1;pointer-events:none;background:var(--ink);
+  }
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:fixed;top:0;left:0;width:100%;
+    padding:22px clamp(20px,5vw,50px);
+    display:flex;justify-content:space-between;align-items:center;
+    z-index:100;
+    background:rgba(2,2,4,0.55);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border-bottom:1px solid rgba(0,116,255,0.3);
+    box-shadow:0 1px 24px rgba(0,116,255,.18);
+  }
+  .logo-group{display:flex;align-items:center;gap:16px;}
+  .logo{
+    font-weight:900;letter-spacing:5px;font-size:1rem;
+    text-transform:uppercase;color:#fff;
+    text-shadow:0 0 12px rgba(0,116,255,.65);
+  }
+  .status-badge{
+    display:flex;align-items:center;gap:8px;
+    font-size:.62rem;letter-spacing:2px;color:var(--blue);
+    background:rgba(0,116,255,.07);
+    padding:5px 11px;border-radius:20px;
+    border:1px solid rgba(0,116,255,.25);
+    text-transform:uppercase;
+  }
+  .status-dot{
+    width:6px;height:6px;background:var(--blue);border-radius:50%;
+    box-shadow:0 0 8px var(--blue);animation:pulse 2s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.25;transform:scale(.75);}}
+
+  .nav-links a{
+    color:#fff;text-decoration:none;margin-left:34px;
+    font-size:.72rem;letter-spacing:3px;text-transform:uppercase;
+    opacity:.65;transition:all .3s ease;position:relative;
+  }
+  .nav-links a::after{
+    content:'';position:absolute;left:0;bottom:-4px;width:0;height:1px;
+    background:var(--red);transition:width .3s ease;
+  }
+  .nav-links a:hover{opacity:1;color:var(--red);text-shadow:0 0 10px rgba(255,17,51,.8);}
+  .nav-links a:hover::after{width:100%;}
+
+  .content{position:relative;z-index:2;}
+  section{
+    min-height:100vh;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;
+    padding:0 8vw;position:relative;
+  }
+
+  /* ---------- HERO ---------- */
+  .hero-eyebrow{
+    display:flex;align-items:center;gap:10px;
+    font-size:.68rem;letter-spacing:6px;text-transform:uppercase;
+    color:var(--blue);margin-bottom:22px;
+    text-shadow:0 0 8px rgba(0,116,255,.6);
+    opacity:0;
+  }
+  .hero-eyebrow::before,.hero-eyebrow::after{
+    content:'';width:26px;height:1px;background:linear-gradient(90deg, transparent, var(--blue));
+  }
+  .hero-eyebrow::after{background:linear-gradient(90deg, var(--blue), transparent);}
+
+  .hero-title{
+    font-size:clamp(2.6rem,7.4vw,7.2rem);
+    font-weight:900;text-align:center;line-height:1.02;
+    letter-spacing:-2px;text-transform:uppercase;color:#fff;
+    text-shadow:0 0 10px rgba(255,255,255,.5), 0 0 26px rgba(0,116,255,.8), 0 0 60px rgba(255,17,51,.5);
+    opacity:0;
+  }
+  .hero-sub{
+    margin-top:26px;font-size:.82rem;letter-spacing:1px;
+    color:rgba(255,255,255,.5);text-align:center;max-width:520px;
+    line-height:1.6;opacity:0;
+  }
+  .scroll-cue{
+    position:absolute;bottom:46px;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+    font-size:.6rem;letter-spacing:3px;color:rgba(255,255,255,.4);
+    text-transform:uppercase;opacity:0;
+  }
+  .scroll-cue .line{width:1px;height:34px;background:linear-gradient(180deg, var(--blue), transparent);animation:cue 2s infinite;}
+  @keyframes cue{0%{opacity:0;transform:scaleY(0);transform-origin:top;}30%{opacity:1;transform:scaleY(1);}100%{opacity:0;transform:scaleY(1);}}
+
+  /* ---------- CARDS ---------- */
+  #cards{padding-top:6vh;padding-bottom:6vh;}
+  .section-label{
+    align-self:flex-start;margin-left:0;margin-bottom:26px;
+    font-size:.68rem;letter-spacing:5px;color:var(--blue);text-transform:uppercase;
+    opacity:.85;
+  }
+  .cards-container{
+    display:flex;width:100%;justify-content:space-between;gap:36px;flex-wrap:wrap;
+  }
+  .card{
+    background:rgba(6,6,13,.62);
+    border:1px solid rgba(0,116,255,.22);
+    backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+    border-radius:14px;
+    flex:1 1 380px;height:480px;min-width:300px;
+    position:relative;overflow:hidden;
+    display:flex;flex-direction:column;justify-content:flex-end;
+    padding:42px;
+    box-shadow:0 0 30px rgba(0,0,0,.8), inset 0 0 15px rgba(0,116,255,.06);
+    transition:border-color .5s cubic-bezier(.16,1,.3,1), box-shadow .5s cubic-bezier(.16,1,.3,1), transform .5s cubic-bezier(.16,1,.3,1);
+  }
+  .card-art{position:absolute;inset:0;z-index:0;}
+  .card-scrim{
+    position:absolute;inset:0;z-index:1;
+    background:linear-gradient(180deg, rgba(4,4,9,.15) 0%, rgba(4,4,9,.35) 45%, rgba(3,3,7,.92) 100%);
+  }
+  .card-tag{
+    position:relative;z-index:2;
+    font-size:.72rem;text-transform:uppercase;letter-spacing:3px;
+    color:var(--blue);text-shadow:0 0 8px rgba(0,116,255,.6);margin-bottom:12px;
+  }
+  .card-title{
+    position:relative;z-index:2;
+    font-size:clamp(1.6rem,2.4vw,2.2rem);font-weight:800;line-height:1.15;
+    text-transform:uppercase;letter-spacing:-.5px;color:#fff;
+    text-shadow:0 0 15px rgba(255,255,255,.4);
+  }
+  .card-desc{
+    position:relative;z-index:2;margin-top:14px;
+    font-size:.78rem;line-height:1.6;color:rgba(255,255,255,.55);
+    max-width:32ch;
+  }
+  .card:hover{
+    border-color:var(--red);
+    box-shadow:0 0 50px rgba(255,17,51,.45), 0 0 90px rgba(0,116,255,.22), inset 0 0 24px rgba(0,116,255,.24);
+    transform:translateY(-8px);
+  }
+
+  /* engine nozzle rings art */
+  .art-rings{width:100%;height:100%;}
+  /* circuit synapse art */
+  .art-circuit{width:100%;height:100%;}
+
+  /* ---------- FOCUS ---------- */
+  .focus-text{
+    font-size:clamp(3rem,9.5vw,9rem);font-weight:900;letter-spacing:.15em;
+    text-transform:uppercase;text-align:center;opacity:0;color:#fff;
+    text-shadow:0 0 12px rgba(255,255,255,.55), 0 0 30px rgba(0,116,255,.9), 0 0 70px rgba(255,17,51,.65);
+  }
+  .focus-caption{
+    margin-top:22px;font-size:.72rem;letter-spacing:4px;color:rgba(255,255,255,.45);
+    text-transform:uppercase;opacity:0;
+  }
+
+  /* ---------- FOOTER ---------- */
+  footer{
+    height:34vh;display:flex;flex-direction:column;justify-content:center;align-items:center;
+    gap:10px;font-size:.72rem;color:rgba(0,116,255,.7);letter-spacing:3px;text-transform:uppercase;
+    border-top:1px solid rgba(0,116,255,.15);background:rgba(2,2,4,.8);
+  }
+  footer .conf{color:var(--red);text-shadow:0 0 10px rgba(255,17,51,.5);}
+  footer .copy{color:rgba(255,255,255,.35);letter-spacing:2px;}
+
+  @media (max-width:720px){
+    .cards-container{flex-direction:column;}
+    .card{height:360px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="hud-overlay"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+<div id="webgl-container"></div>
+
+<nav>
+  <div class="logo-group">
+    <div class="logo">AETHEAS</div>
+    <div class="status-badge"><div class="status-dot"></div>Orbital Core v4.0</div>
+  </div>
+  <div class="nav-links">
+    <a href="#work">Propulsion</a>
+    <a href="#about">Architecture</a>
+    <a href="#contact">Terminal</a>
+  </div>
+</nav>
+
+<div class="content">
+
+  <section id="hero">
+    <div class="hero-eyebrow">$10T Interplanetary Initiative</div>
+    <h1 class="hero-title">Next-Gen Orbital<br>Architecture</h1>
+    <p class="hero-sub">Closed-loop propulsion, autonomous fabrication, and a synthetic reasoning core engineered for permanent presence beyond Earth orbit.</p>
+    <div class="scroll-cue"><span>Scroll</span><div class="line"></div></div>
+  </section>
+
+  <section id="cards">
+    <div class="section-label">Core Systems</div>
+    <div class="cards-container">
+
+      <div class="card card-left">
+        <div class="card-art"><svg class="art-rings" viewBox="0 0 400 480" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="ringGlow" cx="72%" cy="30%" r="65%">
+              <stop offset="0%" stop-color="#0074ff" stop-opacity="0.55"/>
+              <stop offset="45%" stop-color="#ff1133" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="480" fill="url(#ringGlow)"/>
+          <g fill="none" stroke="#0074ff" stroke-opacity="0.5" stroke-width="1.1">
+            <circle cx="290" cy="150" r="30"/><circle cx="290" cy="150" r="55"/>
+            <circle cx="290" cy="150" r="82"/><circle cx="290" cy="150" r="112"/>
+            <circle cx="290" cy="150" r="146"/><circle cx="290" cy="150" r="184"/>
+            <circle cx="290" cy="150" r="226"/>
+          </g>
+          <g fill="none" stroke="#ff1133" stroke-opacity="0.38" stroke-width="1.1">
+            <circle cx="290" cy="150" r="42"/><circle cx="290" cy="150" r="68"/>
+            <circle cx="290" cy="150" r="98"/><circle cx="290" cy="150" r="130"/>
+            <circle cx="290" cy="150" r="164"/><circle cx="290" cy="150" r="204"/>
+          </g>
+          <g fill="#0074ff">
+            <circle cx="290" cy="42" r="2.4"/><circle cx="118" cy="150" r="2.2"/>
+          </g>
+          <g fill="#ff1133">
+            <circle cx="290" cy="258" r="2.4"/><circle cx="462" cy="150" r="2.2"/>
+          </g>
+        </svg></div>
+        <div class="card-scrim"></div>
+        <div class="card-tag">System / 01</div>
+        <div class="card-title">Quantum Drive<br>Propulsion</div>
+        <div class="card-desc">Field-modulated thrust architecture delivering continuous acceleration without reaction mass depletion.</div>
+      </div>
+
+      <div class="card card-right">
+        <div class="card-art"><svg class="art-circuit" viewBox="0 0 400 480" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="circGlow" cx="30%" cy="25%" r="70%">
+              <stop offset="0%" stop-color="#ff1133" stop-opacity="0.5"/>
+              <stop offset="50%" stop-color="#0074ff" stop-opacity="0.16"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="480" fill="url(#circGlow)"/>
+          <g stroke="#0074ff" stroke-opacity="0.55" fill="none" stroke-width="1.4">
+            <path d="M40 60 L140 60 L140 130 L230 130"/>
+            <path d="M40 150 L100 150 L100 220 L190 220 L190 300"/>
+            <path d="M300 40 L300 110 L370 110"/>
+            <path d="M250 260 L250 340 L330 340 L330 420"/>
+            <path d="M60 300 L60 400 L150 400"/>
+          </g>
+          <g fill="#0074ff">
+            <circle cx="140" cy="60" r="3.5"/><circle cx="230" cy="130" r="3.5"/>
+            <circle cx="190" cy="300" r="3.5"/><circle cx="300" cy="110" r="3.5"/>
+            <circle cx="330" cy="420" r="3.5"/><circle cx="150" cy="400" r="3.5"/>
+          </g>
+          <g fill="#ff1133">
+            <circle cx="100" cy="150" r="3"/><circle cx="250" cy="260" r="3"/>
+          </g>
+        </svg></div>
+        <div class="card-scrim"></div>
+        <div class="card-tag">System / 02</div>
+        <div class="card-title">Prometheus<br>Synapse Matrix</div>
+        <div class="card-desc">Distributed cognition layer coordinating fleet-wide decisions in real time, independent of Earth-based latency.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="focus">
+    <h2 class="focus-text">Prometheus</h2>
+    <div class="focus-caption">The Reasoning Core Behind Every System</div>
+  </section>
+
+  <section id="contact" style="min-height:40vh;">
+    <div class="section-label" style="align-self:center;">Terminal</div>
+    <p class="hero-sub" style="margin-top:0;">Access is limited to authorized program partners. Briefing materials available on request.</p>
+  </section>
+
+  <footer>
+    <div class="conf">[ Confidential Briefing — Executive Access ]</div>
+    <div class="copy">© 2026 Aetheas Design Labs. All Rights Reserved.</div>
+  </footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+<script>
+(function(){
+  const container = document.getElementById('webgl-container');
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x020204, 0.045);
+
+  const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 1000);
+  camera.position.set(0, 0.4, 7.5);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x020204, 1.0);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.3;
+  container.appendChild(renderer.domElement);
+
+  // ---- generated environment map for realistic chrome reflections ----
+  function buildEnvTexture(){
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,size);
+    grad.addColorStop(0, '#050912');
+    grad.addColorStop(0.35, '#0a1a26');
+    grad.addColorStop(0.5, '#0074ff');
+    grad.addColorStop(0.65, '#150a18');
+    grad.addColorStop(1, '#01010a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
+    // add pink glow band
+    const rg = ctx.createRadialGradient(size*0.75, size*0.55, 4, size*0.75, size*0.55, size*0.5);
+    rg.addColorStop(0, 'rgba(255,17,51,0.9)');
+    rg.addColorStop(1, 'rgba(255,17,51,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,0,size,size);
+    const cg = ctx.createRadialGradient(size*0.22, size*0.3, 4, size*0.22, size*0.3, size*0.5);
+    cg.addColorStop(0, 'rgba(0,116,255,0.95)');
+    cg.addColorStop(1, 'rgba(0,116,255,0)');
+    ctx.fillStyle = cg; ctx.fillRect(0,0,size,size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    return tex;
+  }
+  const envTex = buildEnvTexture();
+  scene.environment = envTex;
+
+  // ---- chrome torus ring ----
+  const geometry = new THREE.TorusGeometry(1.9, 0.44, 80, 200);
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0x0a0d16,
+    metalness: 1.0,
+    roughness: 0.1,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    reflectivity: 1.0,
+    iridescence: 0.7,
+    iridescenceIOR: 1.3,
+    envMap: envTex,
+    envMapIntensity: 1.4
+  });
+  const mainObject = new THREE.Mesh(geometry, material);
+  scene.add(mainObject);
+
+  // thin inner accent ring
+  const innerGeo = new THREE.TorusGeometry(1.35, 0.02, 16, 200);
+  const innerMat = new THREE.MeshBasicMaterial({color:0x0074ff, transparent:true, opacity:0.6});
+  const innerRing = new THREE.Mesh(innerGeo, innerMat);
+  innerRing.rotation.x = Math.PI/2;
+  scene.add(innerRing);
+
+  // ---- orbital ring array (armillary-style, tilted + aligned) ----
+  // Each orbit is a matched pair: a slim glowing core + a soft additive halo
+  // for a bloomed neon look, alternating blue/red around a shared center.
+  const orbitConfigs = [
+    { radius: 2.55, tube: 0.012, color: 0x0074ff, tiltX: Math.PI/2.35, tiltZ: 0.18,  speed: 0.16 },
+    { radius: 3.05, tube: 0.011, color: 0xff1133, tiltX: Math.PI/2.9,  tiltZ: -0.32, speed: -0.12 },
+    { radius: 3.55, tube: 0.010, color: 0x0074ff, tiltX: Math.PI/1.7,  tiltZ: 0.08,  speed: 0.09 },
+    { radius: 4.05, tube: 0.009, color: 0xff1133, tiltX: Math.PI/3.6,  tiltZ: -0.05, speed: -0.07 }
+  ];
+  const orbitalRings = orbitConfigs.map(cfg => {
+    const group = new THREE.Group();
+
+    const coreGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube, 12, 220);
+    const coreMat = new THREE.MeshBasicMaterial({color: cfg.color, transparent:true, opacity:0.85});
+    const core = new THREE.Mesh(coreGeo, coreMat);
+
+    const haloGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube*5.5, 12, 220);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: cfg.color, transparent:true, opacity:0.16, blending: THREE.AdditiveBlending, depthWrite:false
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+
+    group.add(halo, core);
+    group.rotation.x = cfg.tiltX;
+    group.rotation.z = cfg.tiltZ;
+    group.userData.speed = cfg.speed;
+    scene.add(group);
+    return group;
+  });
+
+  // ---- perspective floor grid ----
+  function buildGridTexture(){
+    const s = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = s; canvas.height = s;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,s,s);
+    ctx.strokeStyle = 'rgba(0,116,255,0.5)';
+    ctx.lineWidth = 1.4;
+    const step = 32;
+    for(let i=0;i<=s;i+=step){
+      ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(s,i); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(6,6);
+    return tex;
+  }
+  const gridTex = buildGridTexture();
+  const floorGeo = new THREE.PlaneGeometry(80, 80, 1, 1);
+  const floorMat = new THREE.MeshBasicMaterial({
+    map: gridTex, transparent:true, opacity:0.16,
+    blending: THREE.AdditiveBlending, depthWrite:false
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = -3.4;
+  scene.add(floor);
+
+  // ---- particle field ----
+  const particleCount = 2600;
+  const particleGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount*3);
+  const colors = new Float32Array(particleCount*3);
+  const originalY = new Float32Array(particleCount);
+  const cBlue = new THREE.Color(0x0074ff);
+  const cRed = new THREE.Color(0xff1133);
+  for(let i=0;i<particleCount;i++){
+    const idx = i*3;
+    positions[idx] = (Math.random()-0.5)*22;
+    positions[idx+1] = (Math.random()-0.5)*20;
+    positions[idx+2] = (Math.random()-0.5)*18;
+    originalY[i] = positions[idx+1];
+    const c = (i%2===0) ? cBlue : cRed;
+    colors[idx]=c.r; colors[idx+1]=c.g; colors[idx+2]=c.b;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  particleGeo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  const particleMat = new THREE.PointsMaterial({
+    size:0.036, vertexColors:true, transparent:true, opacity:0.75, blending:THREE.AdditiveBlending
+  });
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // ---- lighting ----
+  scene.add(new THREE.AmbientLight(0x020208, 1.0));
+  const light1 = new THREE.PointLight(0x0074ff, 10, 32); light1.position.set(4,4,4); scene.add(light1);
+  const light2 = new THREE.PointLight(0xff1133, 10, 32); light2.position.set(-4,-4,2); scene.add(light2);
+  const light3 = new THREE.PointLight(0x0074ff, 5, 24); light3.position.set(0,0,6); scene.add(light3);
+  const light4 = new THREE.PointLight(0xff1133, 4, 24); light4.position.set(0,-2,-5); scene.add(light4);
+  const rim = new THREE.PointLight(0xffffff, 1.4, 20); rim.position.set(0,3,-4); scene.add(rim);
+  const rimBlue = new THREE.PointLight(0x0074ff, 2.2, 26); rimBlue.position.set(-5,1,-3); scene.add(rimBlue);
+  const rimRed = new THREE.PointLight(0xff1133, 2.2, 26); rimRed.position.set(5,-1,3); scene.add(rimRed);
+
+  // ---- mouse parallax ----
+  let mouseX=0, mouseY=0, targetX=0, targetY=0;
+  addEventListener('mousemove', e=>{
+    mouseX = (e.clientX/innerWidth - 0.5)*2;
+    mouseY = (e.clientY/innerHeight - 0.5)*2;
+  });
+
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    targetX += (mouseX-targetX)*0.05;
+    targetY += (mouseY-targetY)*0.05;
+
+    mainObject.rotation.y = t*0.22 + targetX*0.4;
+    mainObject.rotation.z = Math.sin(t*0.3)*0.15 + targetY*0.25;
+    innerRing.rotation.z = t*0.4;
+
+    orbitalRings.forEach(ring => { ring.rotation.y = t * ring.userData.speed; });
+
+    const pos = particleGeo.attributes.position.array;
+    for(let i=0;i<particleCount;i++){
+      const idx=i*3;
+      pos[idx+1] = originalY[i] + Math.sin(t*1.5 + pos[idx]*0.5)*0.2;
+    }
+    particleGeo.attributes.position.needsUpdate = true;
+
+    light1.position.x = Math.sin(t*0.8)*5; light1.position.y = Math.cos(t*0.6)*5;
+    light2.position.x = Math.cos(t*0.8)*5; light2.position.y = Math.sin(t*0.6)*5;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ---- entrance ----
+  orbitalRings.forEach(ring => { ring.scale.set(0.2,0.2,0.2); });
+  gsap.timeline()
+    .to(mainObject.scale, {x:1,y:1,z:1, duration:1.6, ease:'power3.out'}, 0)
+    .from(mainObject.scale, {x:0.2,y:0.2,z:0.2}, 0)
+    .to(orbitalRings.map(r=>r.scale), {x:1,y:1,z:1, duration:1.9, ease:'power3.out', stagger:0.08}, 0.15)
+    .to('.hero-eyebrow', {opacity:1, y:0, duration:.8}, 0.3)
+    .to('.hero-title', {opacity:1, duration:1}, 0.5)
+    .to('.hero-sub', {opacity:1, duration:.9}, 0.9)
+    .to('.scroll-cue', {opacity:1, duration:.8}, 1.3);
+
+  // ---- scroll choreography ----
+  gsap.registerPlugin(ScrollTrigger);
+
+  const scrollTl = gsap.timeline({
+    scrollTrigger:{trigger:'.content', start:'top top', end:'bottom bottom', scrub:1.2}
+  });
+
+  scrollTl
+    .to(mainObject.rotation, {x: Math.PI*1.15, duration:2}, 0)
+    .to(mainObject.position, {z:1.4, y:-0.3, duration:2}, 0)
+    .to(floor.position, {y:-1.2, duration:2}, 0)
+    .to(mainObject.scale, {x:2.3,y:2.3,z:2.3, duration:2}, '>')
+    .to('.focus-text', {opacity:1, duration:1.4}, '<')
+    .to('.focus-caption', {opacity:1, duration:1}, '<0.3')
+    .to(mainObject.material, {opacity:1}, '<')
+    .to(mainObject.rotation, {y:'+=3.4', duration:3}, '<');
+
+  gsap.from('.card-left', {
+    scrollTrigger:{trigger:'#cards', start:'top 75%', end:'top 25%', scrub:1},
+    x:-160, opacity:0
+  });
+  gsap.from('.card-right', {
+    scrollTrigger:{trigger:'#cards', start:'top 75%', end:'top 25%', scrub:1},
+    x:160, opacity:0
+  });
+
+  addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  });
+})();
+</script>
+</body>
+</html>

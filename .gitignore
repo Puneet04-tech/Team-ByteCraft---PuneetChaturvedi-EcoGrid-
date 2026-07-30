@@ -59,6 +59,15 @@ energy_efficiency_extracted/
 ecogrid_integrated_matrix.csv
 ashrae_combined.csv
 occupancy_combined.csv
+# Python virtual environment
+venv/
+env/
+.venv/
+# Flask/Backend
+__pycache__/
+*.pyc
+instance/
+.webassets-cache
 # Keep generated output files
 !ecogrid_triple_dataset_matrix.csv
 !ecogrid_triple_dataset_predictions_*.png

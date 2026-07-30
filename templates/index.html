@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECOGRID AI — Smart Energy Prediction</title>
+<style>
+  :root{
+    --blue:#0074ff;
+    --red:#ff1133;
+    --ink:#020204;
+    --green:#00ff88;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--ink);
+    color:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .hud-overlay{
+    position:fixed;inset:0;pointer-events:none;z-index:3;
+    background-image:
+      linear-gradient(to right, rgba(0,116,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,116,255,0.025) 1px, transparent 1px);
+    background-size:64px 64px;
+    mix-blend-mode:screen;
+  }
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:4;
+    background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,0.55) 100%);
+  }
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:5;opacity:.035;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  #webgl-container{
+    position:fixed;inset:0;z-index:1;pointer-events:none;background:var(--ink);
+  }
+
+  nav{
+    position:fixed;top:0;left:0;width:100%;
+    padding:22px clamp(20px,5vw,50px);
+    display:flex;justify-content:space-between;align-items:center;
+    z-index:100;
+    background:rgba(2,2,4,0.55);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border-bottom:1px solid rgba(0,116,255,0.3);
+    box-shadow:0 1px 24px rgba(0,116,255,.18);
+  }
+  .logo-group{display:flex;align-items:center;gap:16px;}
+  .logo{
+    font-weight:900;letter-spacing:5px;font-size:1rem;
+    text-transform:uppercase;color:#fff;
+    text-shadow:0 0 12px rgba(0,116,255,.65);
+  }
+  .status-badge{
+    display:flex;align-items:center;gap:8px;
+    font-size:.62rem;letter-spacing:2px;color:var(--green);
+    background:rgba(0,255,136,.07);
+    padding:5px 11px;border-radius:20px;
+    border:1px solid rgba(0,255,136,.25);
+    text-transform:uppercase;
+  }
+  .status-dot{
+    width:6px;height:6px;background:var(--green);border-radius:50%;
+    box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.25;transform:scale(.75);}}
+
+  .content{position:relative;z-index:2;}
+  section{
+    min-height:100vh;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;
+    padding:0 8vw;position:relative;
+    padding-bottom:200vh;
+  }
+
+  .hero-eyebrow{
+    display:flex;align-items:center;gap:10px;
+    font-size:.68rem;letter-spacing:6px;text-transform:uppercase;
+    color:var(--blue);margin-bottom:22px;
+    text-shadow:0 0 8px rgba(0,116,255,.6);
+    opacity:0;
+  }
+  .hero-eyebrow::before,.hero-eyebrow::after{
+    content:'';width:26px;height:1px;background:linear-gradient(90deg, transparent, var(--blue));
+  }
+  .hero-eyebrow::after{background:linear-gradient(90deg, var(--blue), transparent);}
+
+  .hero-title{
+    font-size:clamp(2.6rem,7.4vw,7.2rem);
+    font-weight:900;text-align:center;line-height:1.02;
+    letter-spacing:-2px;text-transform:uppercase;color:#fff;
+    text-shadow:0 0 10px rgba(255,255,255,.5), 0 0 26px rgba(0,116,255,.8), 0 0 60px rgba(255,17,51,.5);
+    opacity:0;
+  }
+  .hero-sub{
+    margin-top:26px;font-size:.82rem;letter-spacing:1px;
+    color:rgba(255,255,255,.5);text-align:center;max-width:520px;
+    line-height:1.6;opacity:0;
+  }
+
+  .form-section{
+    margin-top:60px;
+    background:rgba(6,6,13,.62);
+    border:1px solid rgba(0,116,255,.22);
+    backdrop-filter:blur(22px);
+    border-radius:14px;
+    padding:42px;
+    max-width:500px;
+    width:100%;
+    box-shadow:0 0 30px rgba(0,0,0,.8), inset 0 0 15px rgba(0,116,255,.06);
+    opacity:1;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .form-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap:20px;
+    margin-bottom:24px;
+  }
+  .form-group{
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .form-group label{
+    font-size:.68rem;letter-spacing:2px;color:var(--blue);
+    text-transform:uppercase;
+  }
+  .form-group input{
+    background:rgba(2,2,4,.5);
+    border:1px solid rgba(0,116,255,.22);
+    color:#fff;
+    padding:12px 16px;
+    border-radius:8px;
+    font-size:.78rem;
+    transition:border-color .3s ease;
+  }
+  .form-group input:focus{
+    outline:none;
+    border-color:var(--blue);
+    box-shadow:0 0 12px rgba(0,116,255,.3);
+  }
+  .predict-btn{
+    background:linear-gradient(135deg, var(--blue), var(--red));
+    color:#fff;
+    border:none;
+    padding:16px 32px;
+    border-radius:8px;
+    font-size:.78rem;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    font-weight:700;
+    cursor:pointer;
+    transition:all .3s ease;
+    width:100%;
+  }
+  .predict-btn:hover{
+    transform:translateY(-2px);
+    box-shadow:0 0 24px rgba(0,116,255,.5);
+  }
+  .predict-btn:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+  }
+
+  .results-section{
+    margin-top:500px;
+    background:rgba(6,6,13,.62);
+    border:1px solid rgba(0,255,136,.22);
+    backdrop-filter:blur(22px);
+    border-radius:14px;
+    padding:32px;
+    max-width:800px;
+    width:100%;
+    display:block;
+    opacity:0;
+  }
+  .results-section.show{
+    animation:fadeIn .5s ease;
+  }
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  
+  .result-item{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:16px 0;
+    border-bottom:1px solid rgba(0,116,255,.1);
+  }
+  .result-item:last-child{border-bottom:none;}
+  .result-label{
+    font-size:.68rem;letter-spacing:2px;color:rgba(255,255,255,.6);
+    text-transform:uppercase;
+  }
+  .result-value{
+    font-size:1.2rem;font-weight:700;color:var(--green);
+    text-shadow:0 0 8px rgba(0,255,136,.5);
+  }
+  .result-value.occupancy-high{color:var(--red);}
+  .result-value.occupancy-medium{color:var(--blue);}
+  .result-value.occupancy-low{color:var(--green);}
+
+  .loading{
+    display:flex;align-items:center;gap:12px;
+    font-size:.68rem;letter-spacing:2px;color:var(--blue);
+  }
+  .loading-spinner{
+    width:20px;height:20px;
+    border:2px solid rgba(0,116,255,.3);
+    border-top-color:var(--blue);
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  footer{
+    height:34vh;display:flex;flex-direction:column;justify-content:center;align-items:center;
+    gap:10px;font-size:.72rem;color:rgba(0,116,255,.7);letter-spacing:3px;text-transform:uppercase;
+    border-top:1px solid rgba(0,116,255,.15);background:rgba(2,2,4,.8);
+  }
+  footer .conf{color:var(--red);text-shadow:0 0 10px rgba(255,17,51,.5);}
+  footer .copy{color:rgba(255,255,255,.35);letter-spacing:2px;}
+
+  @media (max-width:720px){
+    .form-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="hud-overlay"></div>
+<div class="vignette"></div>
+<div class="grain"></div>
+<div id="webgl-container"></div>
+
+<nav>
+  <div class="logo-group">
+    <div class="logo">ECOGRID</div>
+    <div class="status-badge"><div class="status-dot"></div>System Online</div>
+  </div>
+</nav>
+
+<div class="form-section">
+  <div class="hero-eyebrow">Triple-Dataset AI Engine</div>
+  <div class="hero-title">Smart Energy<br>Prediction</div>
+  <div class="hero-sub">Real-time occupancy detection and HVAC power forecasting using integrated environmental sensors</div>
+
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Hour (0-23)</label>
+      <input type="number" id="hour" min="0" max="23" value="14">
+    </div>
+    <div class="form-group">
+      <label>Day of Week (0-6)</label>
+      <input type="number" id="day_of_week" min="0" max="6" value="2">
+    </div>
+    <div class="form-group">
+      <label>Ambient Temp (°C)</label>
+      <input type="number" id="ambient_temp_c" step="0.1" value="34.5">
+    </div>
+    <div class="form-group">
+      <label>CO2 Level (ppm)</label>
+      <input type="number" id="co2_level" value="800">
+    </div>
+    <div class="form-group">
+      <label>Light (lux)</label>
+      <input type="number" id="light" value="400">
+    </div>
+    <div class="form-group">
+      <label>Humidity (%)</label>
+      <input type="number" id="humidity" min="0" max="100" value="45">
+    </div>
+    <div class="form-group">
+      <label>Outside Temp (°C)</label>
+      <input type="number" id="outside_temp_c" step="0.1" value="32.0">
+    </div>
+    <div class="form-group">
+      <label>Windspeed (m/s)</label>
+      <input type="number" id="windspeed" step="0.1" value="5.0">
+    </div>
+    <div class="form-group">
+      <label>Relative Compactness</label>
+      <input type="number" id="relative_compactness" step="0.01" min="0" max="1" value="0.9">
+    </div>
+    <div class="form-group">
+      <label>Overall Height (m)</label>
+      <input type="number" id="overall_height" step="0.5" value="7.0">
+    </div>
+  </div>
+  <button class="predict-btn" onclick="makePrediction()">Generate Prediction</button>
+</div>
+
+<div class="content">
+  <section>
+    <div class="results-section" id="results">
+      <div class="loading" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <span>Processing sensor data...</span>
+      </div>
+      <div id="results-content" style="display:none;">
+        <div class="result-item">
+          <span class="result-label">Occupancy Level</span>
+          <span class="result-value" id="occupancy-result">--</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">HVAC Power</span>
+          <span class="result-value" id="power-result">-- kW</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Confidence</span>
+          <span class="result-value" id="confidence-result">--%</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Timestamp</span>
+          <span class="result-value" id="timestamp-result" style="font-size:0.9rem;">--</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+  <footer>
+    <div class="conf">Triple-Dataset Integration</div>
+    <div class="copy">EcoGrid AI Engine v1.0</div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+<script>
+(function(){
+  const container = document.getElementById('webgl-container');
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x020204, 0.045);
+
+  const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 1000);
+  camera.position.set(0, 0.4, 7.5);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x020204, 1.0);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.3;
+  container.appendChild(renderer.domElement);
+
+  // Environment map for realistic chrome reflections
+  function buildEnvTexture(){
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,0,size);
+    grad.addColorStop(0, '#050912');
+    grad.addColorStop(0.35, '#0a1a26');
+    grad.addColorStop(0.5, '#0074ff');
+    grad.addColorStop(0.65, '#150a18');
+    grad.addColorStop(1, '#01010a');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,size,size);
+    const rg = ctx.createRadialGradient(size*0.75, size*0.55, 4, size*0.75, size*0.55, size*0.5);
+    rg.addColorStop(0, 'rgba(255,17,51,0.9)');
+    rg.addColorStop(1, 'rgba(255,17,51,0)');
+    ctx.fillStyle = rg; ctx.fillRect(0,0,size,size);
+    const cg = ctx.createRadialGradient(size*0.22, size*0.3, 4, size*0.22, size*0.3, size*0.5);
+    cg.addColorStop(0, 'rgba(0,116,255,0.95)');
+    cg.addColorStop(1, 'rgba(0,116,255,0)');
+    ctx.fillStyle = cg; ctx.fillRect(0,0,size,size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    return tex;
+  }
+  const envTex = buildEnvTexture();
+  scene.environment = envTex;
+
+  // Chrome torus ring
+  const geometry = new THREE.TorusGeometry(1.9, 0.44, 80, 200);
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0x0a0d16,
+    metalness: 1.0,
+    roughness: 0.1,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.05,
+    reflectivity: 1.0,
+    iridescence: 0.7,
+    iridescenceIOR: 1.3,
+    envMap: envTex,
+    envMapIntensity: 1.4
+  });
+  const mainObject = new THREE.Mesh(geometry, material);
+  scene.add(mainObject);
+
+  // thin inner accent ring
+  const innerGeo = new THREE.TorusGeometry(1.35, 0.02, 16, 200);
+  const innerMat = new THREE.MeshBasicMaterial({color:0x0074ff, transparent:true, opacity:0.6});
+  const innerRing = new THREE.Mesh(innerGeo, innerMat);
+  innerRing.rotation.x = Math.PI/2;
+  scene.add(innerRing);
+
+  // Orbital ring array (armillary-style, tilted + aligned)
+  const orbitConfigs = [
+    { radius: 2.55, tube: 0.012, color: 0x0074ff, tiltX: Math.PI/2.35, tiltZ: 0.18,  speed: 0.16 },
+    { radius: 3.05, tube: 0.011, color: 0xff1133, tiltX: Math.PI/2.9,  tiltZ: -0.32, speed: -0.12 },
+    { radius: 3.55, tube: 0.010, color: 0x0074ff, tiltX: Math.PI/1.7,  tiltZ: 0.08,  speed: 0.09 },
+    { radius: 4.05, tube: 0.009, color: 0xff1133, tiltX: Math.PI/3.6,  tiltZ: -0.05, speed: -0.07 }
+  ];
+  const orbitalRings = orbitConfigs.map(cfg => {
+    const group = new THREE.Group();
+
+    const coreGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube, 12, 220);
+    const coreMat = new THREE.MeshBasicMaterial({color: cfg.color, transparent:true, opacity:0.85});
+    const core = new THREE.Mesh(coreGeo, coreMat);
+
+    const haloGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube*5.5, 12, 220);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: cfg.color, transparent:true, opacity:0.16, blending: THREE.AdditiveBlending, depthWrite:false
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+
+    group.add(halo, core);
+    group.rotation.x = cfg.tiltX;
+    group.rotation.z = cfg.tiltZ;
+    group.userData.speed = cfg.speed;
+    scene.add(group);
+    return group;
+  });
+
+  // Side orbital rings (left and right)
+  const sideOrbitConfigs = [
+    { radius: 1.8, tube: 0.008, color: 0x0074ff, tiltX: Math.PI/2.5, tiltZ: 0.5, speed: 0.2, positionX: -5 },
+    { radius: 2.2, tube: 0.007, color: 0xff1133, tiltX: Math.PI/3.0, tiltZ: -0.4, speed: -0.15, positionX: -5 },
+    { radius: 1.8, tube: 0.008, color: 0x0074ff, tiltX: Math.PI/2.5, tiltZ: -0.5, speed: 0.2, positionX: 5 },
+    { radius: 2.2, tube: 0.007, color: 0xff1133, tiltX: Math.PI/3.0, tiltZ: 0.4, speed: -0.15, positionX: 5 }
+  ];
+  
+  const sideOrbitalRings = sideOrbitConfigs.map(cfg => {
+    const group = new THREE.Group();
+
+    const coreGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube, 12, 220);
+    const coreMat = new THREE.MeshBasicMaterial({color: cfg.color, transparent:true, opacity:0.85});
+    const core = new THREE.Mesh(coreGeo, coreMat);
+
+    const haloGeo = new THREE.TorusGeometry(cfg.radius, cfg.tube*5.5, 12, 220);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: cfg.color, transparent:true, opacity:0.16, blending: THREE.AdditiveBlending, depthWrite:false
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+
+    group.add(halo, core);
+    group.rotation.x = cfg.tiltX;
+    group.rotation.z = cfg.tiltZ;
+    group.userData.speed = cfg.speed;
+    group.position.x = cfg.positionX;
+    scene.add(group);
+    return group;
+  });
+
+  // Perspective floor grid
+  function buildGridTexture(){
+    const s = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = s; canvas.height = s;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,s,s);
+    ctx.strokeStyle = 'rgba(0,116,255,0.5)';
+    ctx.lineWidth = 1.4;
+    const step = 32;
+    for(let i=0;i<=s;i+=step){
+      ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(s,i); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(6,6);
+    return tex;
+  }
+  const gridTex = buildGridTexture();
+  const floorGeo = new THREE.PlaneGeometry(80, 80, 1, 1);
+  const floorMat = new THREE.MeshBasicMaterial({
+    map: gridTex, transparent:true, opacity:0.16,
+    blending: THREE.AdditiveBlending, depthWrite:false
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = -3.4;
+  scene.add(floor);
+
+  // Particle field
+  const particleCount = 2600;
+  const particleGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount*3);
+  const colors = new Float32Array(particleCount*3);
+  const originalY = new Float32Array(particleCount);
+  const cBlue = new THREE.Color(0x0074ff);
+  const cRed = new THREE.Color(0xff1133);
+  for(let i=0;i<particleCount;i++){
+    const idx = i*3;
+    positions[idx] = (Math.random()-0.5)*22;
+    positions[idx+1] = (Math.random()-0.5)*20;
+    positions[idx+2] = (Math.random()-0.5)*18;
+    originalY[i] = positions[idx+1];
+    const c = (i%2===0) ? cBlue : cRed;
+    colors[idx]=c.r; colors[idx+1]=c.g; colors[idx+2]=c.b;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+  particleGeo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  const particleMat = new THREE.PointsMaterial({
+    size:0.036, vertexColors:true, transparent:true, opacity:0.75, blending:THREE.AdditiveBlending
+  });
+  const particles = new THREE.Points(particleGeo, particleMat);
+  scene.add(particles);
+
+  // Lighting
+  scene.add(new THREE.AmbientLight(0x020208, 1.0));
+  const light1 = new THREE.PointLight(0x0074ff, 10, 32); light1.position.set(4,4,4); scene.add(light1);
+  const light2 = new THREE.PointLight(0xff1133, 10, 32); light2.position.set(-4,-4,2); scene.add(light2);
+  const light3 = new THREE.PointLight(0x0074ff, 5, 24); light3.position.set(0,0,6); scene.add(light3);
+  const light4 = new THREE.PointLight(0xff1133, 4, 24); light4.position.set(0,-2,-5); scene.add(light4);
+  const rim = new THREE.PointLight(0xffffff, 1.4, 20); rim.position.set(0,3,-4); scene.add(rim);
+  const rimBlue = new THREE.PointLight(0x0074ff, 2.2, 26); rimBlue.position.set(-5,1,-3); scene.add(rimBlue);
+  const rimRed = new THREE.PointLight(0xff1133, 2.2, 26); rimRed.position.set(5,-1,3); scene.add(rimRed);
+
+  // Add orbital ring scroll animation
+  orbitalRings.forEach((ring, index) => {
+    ring.userData.scrollOffset = index * 0.5;
+  });
+  
+  sideOrbitalRings.forEach((ring, index) => {
+    ring.userData.scrollOffset = index * 0.3;
+  });
+
+  // Mouse parallax
+  let mouseX=0, mouseY=0, targetX=0, targetY=0;
+  addEventListener('mousemove', e=>{
+    mouseX = (e.clientX/innerWidth - 0.5)*2;
+    mouseY = (e.clientY/innerHeight - 0.5)*2;
+  });
+
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+    targetX += (mouseX-targetX)*0.05;
+    targetY += (mouseY-targetY)*0.05;
+
+    mainObject.rotation.y = t*0.22 + targetX*0.4;
+    mainObject.rotation.z = Math.sin(t*0.3)*0.15 + targetY*0.25;
+    innerRing.rotation.z = t*0.4;
+
+    // Elliptical expanding motion for orbital rings
+    orbitalRings.forEach((ring, index) => {
+      ring.rotation.y = t * ring.userData.speed;
+      
+      // Add elliptical expanding motion
+      const expandScale = 1 + Math.sin(t * 0.8 + index * 0.5) * 0.15;
+      const contractScale = 1 + Math.cos(t * 0.6 + index * 0.3) * 0.1;
+      
+      ring.scale.set(
+        expandScale,
+        contractScale,
+        expandScale
+      );
+      
+      // Add subtle wobble motion
+      ring.rotation.x += Math.sin(t * 0.2 + index * 0.1) * 0.005;
+      ring.rotation.z += Math.cos(t * 0.15 + index * 0.08) * 0.005;
+      
+      // Add scroll-based position change
+      ring.position.y = Math.sin(t * 0.3 + ring.userData.scrollOffset) * 0.5;
+    });
+    
+    // Same motion for side orbital rings
+    sideOrbitalRings.forEach((ring, index) => {
+      ring.rotation.y = t * ring.userData.speed;
+      
+      // Add elliptical expanding motion
+      const expandScale = 1 + Math.sin(t * 0.8 + index * 0.5) * 0.15;
+      const contractScale = 1 + Math.cos(t * 0.6 + index * 0.3) * 0.1;
+      
+      ring.scale.set(
+        expandScale,
+        contractScale,
+        expandScale
+      );
+      
+      // Add subtle wobble motion
+      ring.rotation.x += Math.sin(t * 0.2 + index * 0.1) * 0.005;
+      ring.rotation.z += Math.cos(t * 0.15 + index * 0.08) * 0.005;
+      
+      // Add scroll-based position change
+      ring.position.y = Math.sin(t * 0.3 + ring.userData.scrollOffset) * 0.5;
+    });
+
+    const pos = particleGeo.attributes.position.array;
+    for(let i=0;i<particleCount;i++){
+      const idx=i*3;
+      pos[idx+1] = originalY[i] + Math.sin(t*1.5 + pos[idx]*0.5)*0.2;
+    }
+    particleGeo.attributes.position.needsUpdate = true;
+
+    light1.position.x = Math.sin(t*0.8)*5; light1.position.y = Math.cos(t*0.6)*5;
+    light2.position.x = Math.cos(t*0.8)*5; light2.position.y = Math.sin(t*0.6)*5;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Entrance animation
+  orbitalRings.forEach(ring => { ring.scale.set(0.2,0.2,0.2); });
+  sideOrbitalRings.forEach(ring => { ring.scale.set(0.2,0.2,0.2); });
+  gsap.timeline()
+    .to(mainObject.scale, {x:1,y:1,z:1, duration:1.6, ease:'power3.out'}, 0)
+    .from(mainObject.scale, {x:0.2,y:0.2,z:0.2}, 0)
+    .to(orbitalRings.map(r=>r.scale), {x:1,y:1,z:1, duration:1.9, ease:'power3.out', stagger:0.08}, 0.15)
+    .to(sideOrbitalRings.map(r=>r.scale), {x:1,y:1,z:1, duration:1.9, ease:'power3.out', stagger:0.08}, 0.2)
+    .to('.hero-eyebrow', {opacity:1, y:0, duration:.8}, 0.3)
+    .to('.hero-title', {opacity:1, duration:1}, 0.5)
+    .to('.hero-sub', {opacity:1, duration:.9}, 0.9);
+
+  // Scroll choreography (exact from AETHEAS)
+  gsap.registerPlugin(ScrollTrigger);
+
+  const scrollTl = gsap.timeline({
+    scrollTrigger:{trigger:'section', start:'top top', end:'bottom bottom', scrub:1.2}
+  });
+
+  scrollTl
+    .to(mainObject.rotation, {x: Math.PI*1.15, duration:2}, 0)
+    .to(mainObject.position, {z:1.4, y:-0.3, duration:2}, 0)
+    .to(floor.position, {y:-1.2, duration:2}, 0)
+    .to(mainObject.scale, {x:2.3,y:2.3,z:2.3, duration:2}, 0.2)
+    .to('.results-section', {opacity:1, duration:1.4}, 0.2)
+    .to(mainObject.material, {opacity:1}, 0.2)
+    .to(mainObject.rotation, {y:'+=3.4', duration:3}, 0.2)
+    .to(orbitalRings[0], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[1], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[2], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[3], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[0].position, {y: 2, duration:3}, 0.2)
+    .to(orbitalRings[1].position, {y: -2, duration:3}, 0.2)
+    .to(orbitalRings[2].position, {y: 1.5, duration:3}, 0.2)
+    .to(orbitalRings[3].position, {y: -1.5, duration:3}, 0.2)
+    .to(orbitalRings[0].scale, {x: 1.5, y: 1.5, z: 1.5, duration:3}, 0.2)
+    .to(orbitalRings[1].scale, {x: 0.7, y: 0.7, z: 0.7, duration:3}, 0.2)
+    .to(orbitalRings[2].scale, {x: 1.3, y: 1.3, z: 1.3, duration:3}, 0.2)
+    .to(orbitalRings[3].scale, {x: 0.8, y: 0.8, z: 0.8, duration:3}, 0.2)
+    .to(sideOrbitalRings[0], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[1], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[2], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[3], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[0].position, {x: -6, duration:3}, 0.2)
+    .to(sideOrbitalRings[1].position, {x: -4, duration:3}, 0.2)
+    .to(sideOrbitalRings[2].position, {x: 4, duration:3}, 0.2)
+    .to(sideOrbitalRings[3].position, {x: 6, duration:3}, 0.2)
+    .to(sideOrbitalRings[0].scale, {x: 1.2, y: 1.2, z: 1.2, duration:3}, 0.2)
+    .to(sideOrbitalRings[1].scale, {x: 0.8, y: 0.8, z: 0.8, duration:3}, 0.2)
+    .to(sideOrbitalRings[2].scale, {x: 1.1, y: 1.1, z: 1.1, duration:3}, 0.2)
+    .to(sideOrbitalRings[3].scale, {x: 0.9, y: 0.9, z: 0.9, duration:3}, 0.2);
+
+  scrollTl
+    .to(mainObject.rotation, {x: Math.PI*1.15, duration:2}, 0)
+    .to(mainObject.position, {z:1.4, y:-0.3, duration:2}, 0)
+    .to(floor.position, {y:-1.2, duration:2}, 0)
+    .to(mainObject.scale, {x:2.3,y:2.3,z:2.3, duration:2}, 0.2)
+    .to('.results-section', {opacity:1, duration:1.4}, 0.2)
+    .to(mainObject.material, {opacity:1}, 0.2)
+    .to(mainObject.rotation, {y:'+=3.4', duration:3}, 0.2)
+    .to(orbitalRings[0], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[1], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[2], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[3], {rotationX: '+=1.5', rotationZ: '+=2.0', duration:3}, 0.2)
+    .to(orbitalRings[0].position, {y: 2, duration:3}, 0.2)
+    .to(orbitalRings[1].position, {y: -2, duration:3}, 0.2)
+    .to(orbitalRings[2].position, {y: 1.5, duration:3}, 0.2)
+    .to(orbitalRings[3].position, {y: -1.5, duration:3}, 0.2)
+    .to(orbitalRings[0].scale, {x: 1.5, y: 1.5, z: 1.5, duration:3}, 0.2)
+    .to(orbitalRings[1].scale, {x: 0.7, y: 0.7, z: 0.7, duration:3}, 0.2)
+    .to(orbitalRings[2].scale, {x: 1.3, y: 1.3, z: 1.3, duration:3}, 0.2)
+    .to(orbitalRings[3].scale, {x: 0.8, y: 0.8, z: 0.8, duration:3}, 0.2)
+    .to(sideOrbitalRings[0], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[1], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[2], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[3], {rotationX: '+=1.0', rotationZ: '+=1.5', duration:3}, 0.2)
+    .to(sideOrbitalRings[0].position, {x: -6, duration:3}, 0.2)
+    .to(sideOrbitalRings[1].position, {x: -4, duration:3}, 0.2)
+    .to(sideOrbitalRings[2].position, {x: 4, duration:3}, 0.2)
+    .to(sideOrbitalRings[3].position, {x: 6, duration:3}, 0.2)
+    .to(sideOrbitalRings[0].scale, {x: 1.2, y: 1.2, z: 1.2, duration:3}, 0.2)
+    .to(sideOrbitalRings[1].scale, {x: 0.8, y: 0.8, z: 0.8, duration:3}, 0.2)
+    .to(sideOrbitalRings[2].scale, {x: 1.1, y: 1.1, z: 1.1, duration:3}, 0.2)
+    .to(sideOrbitalRings[3].scale, {x: 0.9, y: 0.9, z: 0.9, duration:3}, 0.2);
+
+  addEventListener('resize', ()=>{
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  });
+})();
+</script>
+
+<script>
+async function makePrediction() {
+  const resultsSection = document.getElementById('results');
+  const loading = document.getElementById('loading');
+  const resultsContent = document.getElementById('results-content');
+  const btn = document.querySelector('.predict-btn');
+  
+  loading.style.display = 'flex';
+  resultsContent.style.display = 'none';
+  btn.disabled = true;
+  
+  const data = {
+    hour: parseInt(document.getElementById('hour').value),
+    day_of_week: parseInt(document.getElementById('day_of_week').value),
+    ambient_temp_c: parseFloat(document.getElementById('ambient_temp_c').value),
+    co2_level: parseInt(document.getElementById('co2_level').value),
+    light: parseInt(document.getElementById('light').value),
+    humidity: parseInt(document.getElementById('humidity').value),
+    outside_temp_c: parseFloat(document.getElementById('outside_temp_c').value),
+    windspeed: parseFloat(document.getElementById('windspeed').value),
+    relative_compactness: parseFloat(document.getElementById('relative_compactness').value),
+    overall_height: parseFloat(document.getElementById('overall_height').value)
+  };
+  
+  try {
+    const response = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      const occupancy = result.predictions.occupancy;
+      const power = result.predictions.hvac_power_kw;
+      const confidence = (result.predictions.confidence * 100).toFixed(1);
+      
+      document.getElementById('occupancy-result').textContent = occupancy;
+      document.getElementById('occupancy-result').className = 'result-value occupancy-' + occupancy.toLowerCase();
+      document.getElementById('power-result').textContent = power + ' kW';
+      document.getElementById('confidence-result').textContent = confidence + '%';
+      document.getElementById('timestamp-result').textContent = new Date(result.timestamp).toLocaleString();
+      
+      loading.style.display = 'none';
+      resultsContent.style.display = 'block';
+    } else {
+      throw new Error(result.message);
+    }
+  } catch (error) {
+    console.error('Prediction error:', error);
+    alert('Error making prediction: ' + error.message);
+    loading.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+
+</body>
+</html>
