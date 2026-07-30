@@ -47,11 +47,15 @@ time_left.tsv
 *.h5
 *.pb
 
-# Data files (optional - uncomment if you have large datasets)
-# *.csv
-# *.xlsx
-# *.json
-# data/
+# Data files
+*.csv
+*.xlsx
+*.json
+*.txt
+*.zip
+data/
+occupancy_extracted/
+second_dataset_extracted/
 
 # OS specific
 .DS_Store
