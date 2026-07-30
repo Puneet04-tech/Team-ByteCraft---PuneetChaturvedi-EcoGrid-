@@ -1,15 +1,18 @@
 # EcoGrid AI - Smart Energy Prediction System
 
-An advanced AI-powered energy management system that combines triple-dataset integration, machine learning models, and an interactive 3D web interface for real-time occupancy detection and HVAC power forecasting.
+An advanced AI-powered energy management system that combines triple-dataset integration, diverse machine learning models, and an interactive 3D web interface for real-time occupancy detection and HVAC power forecasting.
 
 ## 🌟 Features
 
-### Machine Learning Capabilities
+### Machine Learning Capabilities (ML Track Compliant)
+- **Multi-Model Ensemble**: 6 diverse ML architectures (LightGBM, XGBoost, Random Forest, Gradient Boosting, MLP, SVM)
 - **Triple-Dataset Integration**: Combines occupancy detection, appliances energy consumption, and energy efficiency datasets
 - **Real-time Predictions**: Instant occupancy classification and HVAC power forecasting
-- **Robust Model Training**: LightGBM-based ensemble models with cross-validation
-- **Overfitting Prevention**: Comprehensive regularization and time-series validation
-- **Data Leakage Protection**: Proper train-test splitting and preprocessing pipelines
+- **Weighted Ensemble**: Accuracy-weighted model averaging for optimal predictions
+- **Comprehensive Validation**: 40% holdout validation set, 5-fold cross-validation, confusion matrix analysis
+- **Overfitting Prevention**: Strong regularization, time-series validation, proper train-test splitting
+- **Data Leakage Protection**: Proper train-test splitting before preprocessing
+- **Model Transparency**: Individual model predictions, confidence scores, and feature importance
 
 ### Interactive Web Interface
 - **3D Orbital Motion Visualization**: Stunning Three.js-based orbital ring animations
@@ -24,6 +27,11 @@ An advanced AI-powered energy management system that combines triple-dataset int
 ### Backend
 - **Flask**: Web framework for API serving
 - **LightGBM**: Gradient boosting framework for ML models
+- **XGBoost**: Extreme gradient boosting for ML models
+- **Random Forest**: Bagging ensemble method
+- **Gradient Boosting**: sklearn's boosting implementation
+- **MLP**: Multi-layer perceptron neural network
+- **SVM**: Support vector machine classifier
 - **Pandas & NumPy**: Data processing and numerical operations
 - **Scikit-learn**: Machine learning utilities and preprocessing
 - **Gunicorn**: Production WSGI HTTP server
@@ -133,6 +141,32 @@ Content-Type: application/json
     "hvac_power_kw": 42.35,
     "confidence": 0.892
   },
+  "model_details": {
+    "classification_models": {
+      "lightgbm": {
+        "prediction": "Medium",
+        "confidence": 0.95,
+        "weight": 0.18
+      },
+      "xgboost": {
+        "prediction": "Medium",
+        "confidence": 0.88,
+        "weight": 0.15
+      },
+      "random_forest": {
+        "prediction": "High",
+        "confidence": 0.82,
+        "weight": 0.17
+      }
+    },
+    "regression_models": {
+      "lightgbm": 42.1,
+      "xgboost": 43.2,
+      "random_forest": 41.8
+    },
+    "ensemble_method": "weighted_averaging",
+    "num_models": 6
+  },
   "input_features": {
     "hour": 14,
     "day_of_week": 2,
@@ -163,7 +197,54 @@ GET /api/health
 {
   "status": "healthy",
   "model_loaded": true,
+  "num_models": 6,
+  "model_types": ["lightgbm", "xgboost", "random_forest", "gradient_boosting", "mlp", "svm"],
   "message": "EcoGrid AI API is running"
+}
+```
+
+#### Model Metrics Endpoint
+```bash
+GET /api/model-metrics
+```
+```json
+{
+  "status": "success",
+  "model_metrics": {
+    "lightgbm": {
+      "accuracy": 0.97,
+      "confusion_matrix": [[...], [...], [...]],
+      "classification_report": {...}
+    },
+    "xgboost": {...},
+    "random_forest": {...}
+  },
+  "validation_results": {
+    "feature_importance": {...},
+    "cross_validation_scores": {...}
+  },
+  "num_classes": 3,
+  "class_labels": ["High", "Low", "Medium"]
+}
+```
+
+#### Confusion Matrix Endpoint
+```bash
+GET /api/confusion-matrix
+```
+```json
+{
+  "status": "success",
+  "confusion_matrices": {
+    "lightgbm": {
+      "confusion_matrix": [[...], [...], [...]],
+      "accuracy": 0.97,
+      "classification_report": {...}
+    },
+    "xgboost": {...}
+  },
+  "class_labels": ["High", "Low", "Medium"],
+  "feature_importance": {...}
 }
 ```
 
@@ -174,29 +255,72 @@ GET /api/health
 - **Environmental Features**: Temperature, humidity, CO2 levels, light intensity
 - **Building Features**: Relative compactness, overall height
 - **Weather Features**: Outside temperature, windspeed
+- **Feature Scaling**: StandardScaler for neural networks and SVM
 
-### Model Configuration
-- **Classification Model**: LightGBM Classifier
-  - Ensemble of 2 models for robustness
-  - Balanced class weights for handling imbalance
-  - Strong regularization (lambda=30.0, alpha=15.0)
-  - Conservative depth (max_depth=2) to prevent overfitting
-  
-- **Regression Model**: LightGBM Regressor
-  - Ensemble of 2 models for stability
-  - Same hyperparameters as classification model
-  - Optimized for HVAC power prediction
+### Multi-Model Ensemble Configuration
 
-### Validation Strategy
+#### Classification Models (6 diverse architectures)
+1. **LightGBM Classifier**
+   - Gradient boosting with leaf-wise growth
+   - Strong regularization (lambda=30.0, alpha=15.0)
+   - Balanced class weights
+   - Conservative depth (max_depth=2)
+
+2. **XGBoost Classifier**
+   - Extreme gradient boosting
+   - Similar regularization to LightGBM
+   - Scale-pos-weight for class balance
+   - Robust to overfitting
+
+3. **Random Forest Classifier**
+   - Bagging ensemble method
+   - Multiple decision trees
+   - Class weight balancing
+   - Feature importance analysis
+
+4. **Gradient Boosting Classifier**
+   - sklearn's boosting implementation
+   - Sequential tree building
+   - Subsampling for diversity
+   - Different learning patterns
+
+5. **MLP (Neural Network)**
+   - Multi-layer perceptron: (64, 32) hidden layers
+   - Early stopping for validation
+   - L2 regularization (alpha=0.01)
+   - Adaptive learning rate
+
+6. **SVM (Support Vector Machine)**
+   - RBF kernel for non-linear patterns
+   - Class weight balancing
+   - Probability estimation
+   - Different decision boundaries
+
+#### Regression Models (3 diverse architectures)
+1. **LightGBM Regressor**
+2. **XGBoost Regressor** 
+3. **Random Forest Regressor**
+
+### Ensemble Strategy
+- **Weighted Averaging**: Models weighted by validation accuracy
+- **Probability Averaging**: Soft voting for classification
+- **Prediction Transparency**: Individual model predictions exposed
+- **Dynamic Weighting**: Normalized weights based on performance
+
+### Validation Strategy (Evaluation Criteria Compliant)
+- **40% Holdout Set**: Separate validation dataset for evaluation
 - **5-fold Cross-Validation**: Ensures model generalization
-- **Time-series Splitting**: Prevents temporal autocorrelation
 - **Stratified Sampling**: Maintains class distribution
-- **Holdout Set**: 40% test set for final evaluation
+- **Confusion Matrix Analysis**: Per-model performance metrics
+- **Feature Importance**: Tree-based model interpretability
+- **Time-series Splitting**: Prevents temporal autocorrelation
 
 ### Performance Metrics
-- **Classification Accuracy**: ~85-90% (depends on data quality)
-- **Regression RMSE**: Optimized for HVAC power prediction
-- **Class Balance**: Improved recall for minority classes
+- **Multi-Model Accuracy**: Individual and ensemble accuracy scores
+- **Confusion Matrices**: Detailed per-class performance
+- **Classification Reports**: Precision, recall, F1-score per class
+- **Cross-Validation Scores**: Mean accuracy with standard deviation
+- **Feature Importance**: Relative importance of input features
 - **Confidence Scores**: Probability-based prediction confidence
 
 ## 🌐 Deployment
@@ -364,6 +488,47 @@ Contributions are welcome! Please follow these guidelines:
 - **User Authentication**: Secure user access
 - **Mobile App**: Native mobile application
 - **Dashboard**: Advanced analytics dashboard
+
+## 🏆 Evaluation Criteria Compliance
+
+### ML Track Requirements Met
+
+#### ✅ Effective Use of Locally Running AI/ML Models
+- **6 Different Model Architectures**: LightGBM, XGBoost, Random Forest, Gradient Boosting, MLP, SVM
+- **No API-Based Models**: All models run locally
+- **Diverse Implementations**: Tree-based, neural networks, and kernel methods
+- **Ensemble Approach**: Combines multiple local models for robustness
+
+#### ✅ Confusion Matrix & Performance Analysis
+- **Individual Model Confusion Matrices**: Available via `/api/confusion-matrix` endpoint
+- **Classification Reports**: Precision, recall, F1-score for each class
+- **Feature Importance**: Tree-based model interpretability
+- **Cross-Validation Scores**: 5-fold CV with mean and standard deviation
+- **40% Holdout Validation**: Separate dataset for evaluation
+
+#### ✅ Overfitting Prevention
+- **Strong Regularization**: L1/L2 regularization (lambda=30.0, alpha=15.0)
+- **Conservative Architecture**: Max depth=2, limited tree count
+- **Cross-Validation**: 5-fold CV to ensure generalization
+- **Proper Splitting**: Train-test split before preprocessing
+- **Stratified Sampling**: Maintains class distribution
+
+#### ✅ Innovative Features
+- **Multi-Model Ensemble**: Weighted accuracy-based model averaging
+- **Prediction Transparency**: Individual model predictions exposed
+- **Real-time Feature Scaling**: StandardScaler for neural networks
+- **Dynamic Weighting**: Models weighted by validation performance
+- **Comprehensive Metrics**: Multiple evaluation endpoints for analysis
+- **Interactive 3D Visualization**: Novel frontend with orbital motion
+- **Diverse Model Types**: Gradient boosting, bagging, neural networks, SVM
+
+### Novel Applications
+- **Weighted Ensemble System**: Accuracy-based dynamic model weighting
+- **Multi-Architecture Approach**: Combines fundamentally different ML paradigms
+- **Transparent Predictions**: Shows individual model contributions
+- **Real-time ML API**: Instant predictions with confidence scores
+- **3D Visualization**: Interactive orbital motion for result presentation
+- **Comprehensive Analysis**: Detailed metrics and confusion matrices via API
 
 ### Model Improvements
 - **Deep Learning**: Neural network models

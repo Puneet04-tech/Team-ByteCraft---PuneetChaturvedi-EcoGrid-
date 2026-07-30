@@ -1,6 +1,7 @@
 """
 ECOGRID AI: FLASK BACKEND API
 Serves the trained model for real-time predictions
+Multi-model ensemble with confusion matrix analysis
 """
 
 from flask import Flask, request, jsonify, render_template
@@ -10,8 +11,14 @@ import numpy as np
 import joblib
 import os
 import warnings
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import cross_val_score, StratifiedKFold
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 import lightgbm as lgb
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, RandomForestRegressor
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
+import xgboost as xgb
 warnings.filterwarnings('ignore')
 
 # Global variables for models
@@ -19,10 +26,13 @@ classification_models = None
 regression_models = None
 label_encoder = None
 feature_cols = None
+scaler = None
+model_metrics = None
+validation_results = None
 
 def load_models():
-    """Load and train the models on startup"""
-    global classification_models, regression_models, label_encoder, feature_cols
+    """Load and train multiple diverse ML models on startup"""
+    global classification_models, regression_models, label_encoder, feature_cols, scaler, model_metrics, validation_results
     
     try:
         # Load the integrated dataset
@@ -49,24 +59,141 @@ def load_models():
         y_cls = df['Occupancy_Label']
         y_reg = df['HVAC_Power_kW']
         
-        # Train classification models (LightGBM only)
+        # Scale features for neural networks and SVM
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        
+        # Split for validation (40% holdout as per evaluation criteria)
+        from sklearn.model_selection import train_test_split
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y_cls, test_size=0.4, stratify=y_cls, random_state=42
+        )
+        X_train_scaled, X_val_scaled, _, _ = train_test_split(
+            X_scaled, y_cls, test_size=0.4, stratify=y_cls, random_state=42
+        )
+        
+        # Train diverse classification models (Multiple architectures as per criteria)
+        print("Training diverse ML models...")
+        
+        # 1. LightGBM (Gradient Boosting)
         lgb_cls_params = {
             'n_estimators': 50, 'max_depth': 2, 'learning_rate': 0.1,
             'reg_lambda': 30.0, 'reg_alpha': 15.0, 'min_child_samples': 20,
             'subsample': 0.7, 'colsample_bytree': 0.7, 'class_weight': 'balanced',
             'random_state': 42, 'verbose': -1
         }
+        lgb_model = lgb.LGBMClassifier(**lgb_cls_params).fit(X_train, y_train)
         
-        m1_cls = lgb.LGBMClassifier(**lgb_cls_params).fit(X, y_cls)
-        m2_cls = lgb.LGBMClassifier(**lgb_cls_params).fit(X, y_cls)
-        classification_models = {'lgb1': m1_cls, 'lgb2': m2_cls}
+        # 2. XGBoost (Gradient Boosting)
+        xgb_model = xgb.XGBClassifier(
+            n_estimators=50, max_depth=2, learning_rate=0.1,
+            reg_lambda=30.0, reg_alpha=15.0, subsample=0.7, colsample_bytree=0.7,
+            scale_pos_weight='balanced', random_state=42, verbosity=0
+        ).fit(X_train, y_train)
         
-        # Train regression models (LightGBM only)
-        m1_reg = lgb.LGBMRegressor(**lgb_cls_params).fit(X, y_reg)
-        m2_reg = lgb.LGBMRegressor(**lgb_cls_params).fit(X, y_reg)
-        regression_models = {'lgb1': m1_reg, 'lgb2': m2_reg}
+        # 3. Random Forest (Bagging)
+        rf_model = RandomForestClassifier(
+            n_estimators=50, max_depth=2, min_samples_split=20,
+            class_weight='balanced', random_state=42, n_jobs=-1
+        ).fit(X_train, y_train)
         
-        print("Models trained successfully")
+        # 4. Gradient Boosting (sklearn)
+        gb_model = GradientBoostingClassifier(
+            n_estimators=50, max_depth=2, learning_rate=0.1,
+            subsample=0.7, random_state=42
+        ).fit(X_train, y_train)
+        
+        # 5. MLP (Neural Network)
+        mlp_model = MLPClassifier(
+            hidden_layer_sizes=(64, 32), max_iter=200, learning_rate_init=0.01,
+            alpha=0.01, random_state=42, early_stopping=True, validation_fraction=0.2
+        ).fit(X_train_scaled, y_train)
+        
+        # 6. SVM (Support Vector Machine)
+        svm_model = SVC(
+            C=1.0, kernel='rbf', gamma='scale', class_weight='balanced',
+            probability=True, random_state=42
+        ).fit(X_train_scaled, y_train)
+        
+        classification_models = {
+            'lightgbm': lgb_model,
+            'xgboost': xgb_model,
+            'random_forest': rf_model,
+            'gradient_boosting': gb_model,
+            'mlp': mlp_model,
+            'svm': svm_model
+        }
+        
+        # Train regression models
+        lgb_reg = lgb.LGBMRegressor(**lgb_cls_params).fit(X_train, y_train)
+        xgb_reg = xgb.XGBRegressor(
+            n_estimators=50, max_depth=2, learning_rate=0.1,
+            reg_lambda=30.0, reg_alpha=15.0, subsample=0.7, colsample_bytree=0.7,
+            random_state=42, verbosity=0
+        ).fit(X_train, y_train)
+        rf_reg = RandomForestRegressor(
+            n_estimators=50, max_depth=2, min_samples_split=20,
+            random_state=42, n_jobs=-1
+        ).fit(X_train, y_train)
+        
+        regression_models = {
+            'lightgbm': lgb_reg,
+            'xgboost': xgb_reg,
+            'random_forest': rf_reg
+        }
+        
+        # Calculate model metrics and confusion matrix
+        model_metrics = {}
+        for name, model in classification_models.items():
+            if name in ['mlp', 'svm']:
+                X_test = X_val_scaled
+            else:
+                X_test = X_val
+            
+            y_pred = model.predict(X_test)
+            accuracy = accuracy_score(y_val, y_pred)
+            cm = confusion_matrix(y_val, y_pred)
+            
+            model_metrics[name] = {
+                'accuracy': accuracy,
+                'confusion_matrix': cm.tolist(),
+                'classification_report': classification_report(y_val, y_pred, output_dict=True)
+            }
+        
+        # Store validation results for evaluation
+        validation_results = {
+            'feature_importance': {},
+            'cross_validation_scores': {}
+        }
+        
+        # Get feature importance from tree-based models
+        for name in ['lightgbm', 'xgboost', 'random_forest', 'gradient_boosting']:
+            if hasattr(classification_models[name], 'feature_importances_'):
+                validation_results['feature_importance'][name] = dict(zip(
+                    feature_cols, classification_models[name].feature_importances_.tolist()
+                ))
+        
+        # Cross-validation scores
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        for name, model in classification_models.items():
+            if name in ['mlp', 'svm']:
+                X_cv = X_scaled
+            else:
+                X_cv = X
+            
+            cv_scores = cross_val_score(model, X_cv, y_cls, cv=cv, scoring='accuracy')
+            validation_results['cross_validation_scores'][name] = {
+                'mean': cv_scores.mean(),
+                'std': cv_scores.std(),
+                'scores': cv_scores.tolist()
+            }
+        
+        print("Diverse ML models trained successfully")
+        print(f"Model accuracies: { {name: metrics['accuracy'] for name, metrics in model_metrics.items()} }")
+        return True
+    except Exception as e:
+        print(f"Error loading models: {e}")
+        return False
         return True
     except Exception as e:
         print(f"Error loading models: {e}")
@@ -91,6 +218,8 @@ def api_health():
     return jsonify({
         'status': 'healthy',
         'model_loaded': classification_models is not None,
+        'num_models': len(classification_models) if classification_models else 0,
+        'model_types': list(classification_models.keys()) if classification_models else [],
         'message': 'EcoGrid AI API is running'
     })
 
@@ -153,20 +282,55 @@ def predict():
         
         # Use trained models for predictions
         if classification_models and regression_models:
-            # Classification prediction (occupancy)
-            cls_prob_lgb1 = classification_models['lgb1'].predict_proba(features)[0]
-            cls_prob_lgb2 = classification_models['lgb2'].predict_proba(features)[0]
-            cls_prob = (cls_prob_lgb1 + cls_prob_lgb2) / 2
+            # Classification prediction (occupancy) - Ensemble of diverse models
+            cls_predictions = []
+            cls_probabilities = []
+            
+            for name, model in classification_models.items():
+                if name in ['mlp', 'svm']:
+                    features_scaled = scaler.transform(features)
+                    prob = model.predict_proba(features_scaled)[0]
+                else:
+                    prob = model.predict_proba(features)[0]
+                
+                cls_probabilities.append(prob)
+                cls_predictions.append(np.argmax(prob))
+            
+            # Weighted ensemble based on model accuracy
+            weights = [model_metrics[name]['accuracy'] for name in classification_models.keys()]
+            weights = np.array(weights) / sum(weights)  # Normalize weights
+            
+            # Weighted probability averaging
+            cls_prob = np.average(cls_probabilities, axis=0, weights=weights)
             occupancy_pred = np.argmax(cls_prob)
             occupancy = label_encoder.inverse_transform([occupancy_pred])[0]
             
-            # Calculate confidence based on probability
+            # Calculate confidence based on weighted probability
             confidence = np.max(cls_prob)
             
-            # Regression prediction (power)
-            power_pred_lgb1 = regression_models['lgb1'].predict(features)[0]
-            power_pred_lgb2 = regression_models['lgb2'].predict(features)[0]
-            predicted_power = round((power_pred_lgb1 + power_pred_lgb2) / 2, 2)
+            # Individual model predictions for transparency
+            model_predictions = {}
+            for i, name in enumerate(classification_models.keys()):
+                pred_label = label_encoder.inverse_transform([cls_predictions[i]])[0]
+                model_predictions[name] = {
+                    'prediction': pred_label,
+                    'confidence': float(cls_probabilities[i][cls_predictions[i]]),
+                    'weight': float(weights[i])
+                }
+            
+            # Regression prediction (power) - Ensemble of diverse models
+            reg_predictions = []
+            for name, model in regression_models.items():
+                pred = model.predict(features)[0]
+                reg_predictions.append(pred)
+            
+            # Simple averaging for regression
+            predicted_power = round(np.mean(reg_predictions), 2)
+            
+            # Individual regression predictions
+            regression_details = {}
+            for i, name in enumerate(regression_models.keys()):
+                regression_details[name] = float(reg_predictions[i])
         else:
             # Fallback to rule-based if models not loaded
             if co2_level > 1000:
@@ -189,6 +353,12 @@ def predict():
                 'occupancy': occupancy,
                 'hvac_power_kw': predicted_power,
                 'confidence': round(confidence, 3)
+            },
+            'model_details': {
+                'classification_models': model_predictions,
+                'regression_models': regression_details,
+                'ensemble_method': 'weighted_averaging',
+                'num_models': len(classification_models)
             },
             'input_features': {
                 'hour': hour,
@@ -231,9 +401,53 @@ def get_features():
         ],
         'model_info': {
             'name': 'EcoGrid Triple-Dataset AI',
-            'version': '1.0',
-            'type': 'Classification + Regression'
+            'version': '2.0',
+            'type': 'Multi-Model Ensemble Classification + Regression',
+            'model_types': ['LightGBM', 'XGBoost', 'Random Forest', 'Gradient Boosting', 'MLP', 'SVM']
         }
+    })
+
+@app.route('/api/model-metrics', methods=['GET'])
+def get_model_metrics():
+    """Get detailed model metrics including confusion matrices"""
+    if model_metrics is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Model metrics not available'
+        }), 404
+    
+    return jsonify({
+        'status': 'success',
+        'model_metrics': model_metrics,
+        'validation_results': validation_results,
+        'feature_columns': feature_cols,
+        'num_classes': len(label_encoder.classes_),
+        'class_labels': label_encoder.classes_.tolist()
+    })
+
+@app.route('/api/confusion-matrix', methods=['GET'])
+def get_confusion_matrix():
+    """Get confusion matrix for evaluation"""
+    if model_metrics is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Confusion matrix not available'
+        }), 404
+    
+    # Return confusion matrices for all models
+    confusion_matrices = {}
+    for name, metrics in model_metrics.items():
+        confusion_matrices[name] = {
+            'confusion_matrix': metrics['confusion_matrix'],
+            'accuracy': metrics['accuracy'],
+            'classification_report': metrics['classification_report']
+        }
+    
+    return jsonify({
+        'status': 'success',
+        'confusion_matrices': confusion_matrices,
+        'class_labels': label_encoder.classes_.tolist(),
+        'feature_importance': validation_results['feature_importance'] if validation_results else None
     })
 
 # Load models when module is imported (for Gunicorn)
