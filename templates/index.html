@@ -76,8 +76,9 @@
   .content{position:relative;z-index:2;}
   section{
     min-height:100vh;display:flex;flex-direction:column;
-    justify-content:center;align-items:center;
+    justify-content:flex-start;align-items:center;
     padding:0 8vw;position:relative;
+    padding-top:120px;
     padding-bottom:200vh;
   }
 
@@ -86,7 +87,7 @@
     font-size:.68rem;letter-spacing:6px;text-transform:uppercase;
     color:var(--blue);margin-bottom:22px;
     text-shadow:0 0 8px rgba(0,116,255,.6);
-    opacity:0;
+    opacity:1;
   }
   .hero-eyebrow::before,.hero-eyebrow::after{
     content:'';width:26px;height:1px;background:linear-gradient(90deg, transparent, var(--blue));
@@ -98,16 +99,18 @@
     font-weight:900;text-align:center;line-height:1.02;
     letter-spacing:-2px;text-transform:uppercase;color:#fff;
     text-shadow:0 0 10px rgba(255,255,255,.5), 0 0 26px rgba(0,116,255,.8), 0 0 60px rgba(255,17,51,.5);
-    opacity:0;
+    opacity:1;
+    margin-bottom: 40px;
   }
   .hero-sub{
     margin-top:26px;font-size:.82rem;letter-spacing:1px;
     color:rgba(255,255,255,.5);text-align:center;max-width:520px;
-    line-height:1.6;opacity:0;
+    line-height:1.6;opacity:1;
+    margin-bottom: 60px;
   }
 
   .form-section{
-    margin-top:60px;
+    margin-top:400px;
     background:rgba(6,6,13,.62);
     border:1px solid rgba(0,116,255,.22);
     backdrop-filter:blur(22px);
@@ -117,10 +120,7 @@
     width:100%;
     box-shadow:0 0 30px rgba(0,0,0,.8), inset 0 0 15px rgba(0,116,255,.06);
     opacity:1;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    position: relative;
     z-index: 1000;
     max-height: 85vh;
     overflow-y: auto;
@@ -250,11 +250,15 @@
   </div>
 </nav>
 
-<div class="form-section">
-  <div class="hero-eyebrow">Triple-Dataset AI Engine</div>
-  <div class="hero-title">Smart Energy<br>Prediction</div>
-  <div class="hero-sub">Real-time occupancy detection and HVAC power forecasting using integrated environmental sensors</div>
+<div class="content">
+  <section>
+    <div class="hero-eyebrow">Triple-Dataset AI Engine</div>
+    <div class="hero-title">Smart Energy<br>Prediction</div>
+    <div class="hero-sub">Real-time occupancy detection and HVAC power forecasting using integrated environmental sensors</div>
+  </section>
+</div>
 
+<div class="form-section">
   <div class="form-grid">
     <div class="form-group">
       <label>Hour (0-23)</label>
